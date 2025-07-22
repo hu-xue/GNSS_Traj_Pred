@@ -1,3 +1,7 @@
 __pycache__/
 .vscode/
 data/20210610_100.txt
+*.pth
+*.npy
+
+*.png

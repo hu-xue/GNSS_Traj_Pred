@@ -19,7 +19,7 @@ class GNSSDataset(Dataset):
         self.sta_files = sorted(glob.glob(os.path.join(self.sta_dir, "*")))
         self.sequences = []  # 每个time_series区间内的样本list
         self.seq_index = []  # (区间idx, 滑窗起点idx)
-        self.seq_len = seq_len     # 每个序列长度
+        self.seq_len = seq_len  # 每个序列长度
         self._prepare_sequences()
 
     def _prepare_sequences(self):
@@ -68,39 +68,49 @@ class GNSSDataset(Dataset):
         feature_dim = 4
         xs = []
         ys = []
+        gpss = []
+        os = []
+        navs = []
         for o, nav, label in seq:
             ret = util.get_ls_pnt_pos(o, nav)
             if not ret["status"]:
-                x = np.zeros(max_sats * feature_dim, dtype=np.float32)
+                x = np.zeros(max_sats * feature_dim + 3, dtype=np.float32)
+                gps = np.zeros(3, dtype=np.float32)
             else:
                 exclude = ret["data"]["exclude"]
+                gps = ret["pos"][:3]
                 SNR = np.array(ret["data"]["SNR"])
                 azel = np.delete(
                     np.array(ret["data"]["azel"]).reshape((-1, 2)), exclude, axis=0
                 )
                 resd = np.array(ret["data"]["residual"])
                 n = min(len(SNR), max_sats)
-                features = np.zeros((max_sats, feature_dim), dtype=np.float32)
-                for i in range(n):
-                    features[i, 0] = SNR[i]
-                    features[i, 1] = azel[i, 0] if azel.shape[1] > 0 else 0
-                    features[i, 2] = azel[i, 1] if azel.shape[1] > 1 else 0
-                    features[i, 3] = resd[i]
-                x = features.flatten()
+                indata = np.zeros((max_sats, 3), dtype=np.float32)
+                valid = np.hstack(
+                    [SNR.reshape(-1, 1), azel[:, 1:], resd.reshape(-1, 1)]
+                )
+                indata[:n, :] = valid
+                x = indata
             if self.transform:
                 x = self.transform(x)
+            gpss.append(gps)
             xs.append(x)
             ys.append(label)
-        xs = torch.from_numpy(np.stack(xs)).float()  # [seq_len, feature_dim*max_sats]
+            os.append(o)
+            navs.append(nav)
+        xs = torch.from_numpy(np.stack(xs)).float()  # [seq_len, feature_dim, channel]
+        gpss = torch.from_numpy(np.stack(gpss)).float()  # [seq_len, gps_dim]
         ys = torch.from_numpy(np.stack(ys)).float()  # [seq_len, label_dim]
-        return xs, ys
+        return xs, gpss, ys, os, navs
 
 
 # 用法示例
 if __name__ == "__main__":
-    time_series = {(1623297151, 1623297556), (1623296918, 1623297126)}  # 读取klt3 和 klt2
+    time_series = {
+        (1623297151, 1623297556),
+    }  # 读取klt3
     dataset = GNSSDataset(data_dir="data", time_series=time_series)
     loader = DataLoader(dataset, batch_size=8, shuffle=True)
     print("loader len:", len(loader))
-    for x, y in loader:
-        print(x.shape, y.shape)
+    for x, gps, y in loader:
+        print(x.shape, gps.shape, y.shape)
