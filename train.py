@@ -46,7 +46,7 @@ print("Config file:", config_file)
 dataset_name = config_file.split("/")[-1].split(".json")[0].split("_")[0]
 print(dataset_name)
 # 后缀
-if dataset_name in ["deep", "medium", "harsh", "klt1", "klt2", "klt3"]:
+if dataset_name in ["klt1", "klt2", "klt3"]:
     ends = "png"
 elif dataset_name in ["rw1", "rw2", "rw3"]:
     ends = "jpg"
@@ -312,17 +312,29 @@ for k in range(resume_ep, epoch):
             # 用网络预测的权重和偏置来计算最小二乘解
             pred_obss = obss[input_indices[-1]]
             ret_ori = util.get_ls_pnt_pos(pred_obss, nav)
+            ret_ori_sats = ret_ori["data"]["sats"]
+            ret_ori_exclude = ret_ori["data"]["exclude"]
+            sats_used = np.delete(np.array(ret_ori_sats), ret_ori_exclude, axis=0)
+            weight = weight[:len(sats_used)]
+            bias = bias[:len(sats_used)]
             
             ret = util.get_ls_pnt_pos_torch(pred_obss, nav, torch.diag(weight), bias.reshape(-1, 1), p_init=ret_ori["pos"])
             result_wls = ret["pos"][:3]
             enu = p3d.ecef2enu(*result_wls, gnss_gts[0], gnss_gts[1], gnss_gts[2])
             gnss_positioning_loss = torch.norm(torch.hstack(enu[:3]))  # 每个sample的loss
             
-            # 计算预测的8个时间步的位置
+            # 计算预测的x个时间步的位置
             pred_positions = []
-            for i in target_indices:
-                o=obss[i]
-                ret_pred = util.get_ls_pnt_pos_torch(o, nav, torch.diag(weight_pred[i]), bias_pred[i].reshape(-1, 1), p_init=ret_ori["pos"])
+            for i, idx in enumerate(target_indices):
+                o=pred_obss
+                # 计算基于模型的最小二乘解
+                ret = util.get_ls_pnt_pos(o, nav)
+                ret_sats = ret["data"]["sats"]
+                ret_exclude = ret["data"]["exclude"]
+                sats_used = np.delete(np.array(ret_sats), ret_exclude, axis=0)
+                sats_number = len(sats_used)
+                
+                ret_pred = util.get_ls_pnt_pos_torch(o, nav, torch.diag(weight_pred[i][:sats_number]), bias_pred[i][:sats_number].reshape(-1, 1), p_init=ret_ori["pos"])
                 result_wls_pred = ret_pred["pos"][:3]
                 enu_pred = p3d.ecef2enu(*result_wls_pred, target_gts[i][0], target_gts[i][1], target_gts[i][2])
                 pred_loss_i = torch.norm(torch.hstack(enu_pred[:3]))

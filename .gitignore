@@ -3,5 +3,6 @@ __pycache__/
 data/20210610_100.txt
 *.pth
 *.npy
-
+model/
+result/
 *.png

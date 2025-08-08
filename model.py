@@ -66,13 +66,13 @@ class VGPNet(nn.Module):
             nn.Linear(32, 2),
         )
         
-        self.pred_weitht_bias_head = nn.Sequential(
+        self.pred_weight_bias_head = nn.Sequential(
             nn.Linear(feature_dim, 64),
             nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Linear(32, 16),
+            nn.Linear(32, self.prediction_length * 2),  # 预测长度的权重和偏置
         )
         
         self.ccffm = CCFFM(channels=64, heads=4)
@@ -90,9 +90,9 @@ class VGPNet(nn.Module):
         """
         # 获取sequence_length的最大卫星数
         max_sats_num = 0
-        last_sats_num = x_sequence[-1].shape[0]  # 最后一个时间步的卫星数
+        # last_sats_num = x_sequence[-1].shape[0]  # 最后一个时间步的卫星数
         for x in x_sequence:
-            max_sats_num = max(max_sats_num, x.shape[0])
+            max_sats_num = max(max_sats_num, x.shape[0])  # 获取最大卫星数
         
         # pad x_sequence
         padded_x_sequence = []
@@ -119,11 +119,11 @@ class VGPNet(nn.Module):
         
         # 取最后一个时间步的卫星特征和图像特征
         last_sat_features = lstm_out[-1]
-        if last_sat_features.shape[0] > last_sats_num:
-            last_sat_features = last_sat_features[:last_sats_num]
+        # if last_sat_features.shape[0] > last_sats_num:
+            # last_sat_features = last_sat_features[:last_sats_num]
         
         last_img_features = img_lstm_out[-1]
-        last_img_features = last_img_features.repeat(last_sats_num, 1)  # [last_sats_num, 128]
+        last_img_features = last_img_features.repeat(max_sats_num, 1)  # [last_sats_num, 128]
         
         # print(f"last_sat_features shape: {last_sat_features.shape}, last_img_features shape: {last_img_features.shape}")
         
@@ -138,11 +138,11 @@ class VGPNet(nn.Module):
         
         
         # 计算未来8个时间步的权重和偏置
-        pred_weights_bias = self.pred_weitht_bias_head(combined_features)
+        pred_weights_bias = self.pred_weight_bias_head(combined_features)
         
-        pred_weights = torch.sigmoid(pred_weights_bias[:, :8])
+        pred_weights = torch.sigmoid(pred_weights_bias[:, :self.prediction_length])
         pred_weights = torch.clamp(pred_weights, min=0, max=1)
-        pred_biases = F.leaky_relu(pred_weights_bias[:, 8:])
+        pred_biases = F.leaky_relu(pred_weights_bias[:, self.prediction_length:])
 
         return {
             "weights": weights,  # 表示5个输入序列中，最后一个GNSS观测的权重
