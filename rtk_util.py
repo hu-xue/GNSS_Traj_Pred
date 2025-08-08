@@ -74,6 +74,7 @@ def gettgd(sat, nav, type):
 
 
 def prange(obs, nav, opt, var):
+    '''伪距修正'''
     P1, P2, gamma, b1, b2 = 0.0, 0.0, 0.0, 0.0, 0.0
     var[0] = 0.0
 
@@ -584,6 +585,7 @@ def DD_H_matrix(satpos, p00, ms, sys_map):
 
 
 def get_wls_pnt_pos(o, nav, exsatids=[], SNR=0, EL=0, RESD=10000):
+    '''rtklib'''
     maxiter = 20
     if o.n < 4:
         return {
@@ -986,15 +988,16 @@ def H_matrix_prl_nlos(satpos, rp, dts, time, nav, sats, nlos, exclude=[]):
 
 
 def get_ls_pnt_pos(o, nav, exsatids=[]):
+    '''rtklib'''
     maxiter = 10
-    if o.n < 4:
+    if o.n < 4:  # 观测数小于4个
         return {
             "status": False,
             "pos": np.array([0, 0, 0, 0]),
             "msg": "no enough observations",
             "data": {},
         }
-    rs, noeph, dts, var = get_sat_pos(o.data, o.n, nav)
+    rs, noeph, dts, var = get_sat_pos(o.data, o.n, nav)  # 获取卫星位置和时间差
     w = 1 / np.sqrt(np.array(var))
     # if noeph :
     #     print('some sats without ephemeris')
@@ -1016,7 +1019,7 @@ def get_ls_pnt_pos(o, nav, exsatids=[]):
         if (
             pii == 0
             or obsd.sat in exsatids
-            or sysname.ptr[0] not in ["G", "C", "R", "E"]
+            or sysname.ptr[0] not in ["G", "C", "R", "E"]  # 仅处理GPS、北斗、GLONASS和Galileo卫星
         ):
             exclude.append(ii - skip)
             prs.append(0)
@@ -1067,15 +1070,15 @@ def get_ls_pnt_pos(o, nav, exsatids=[]):
     )
     return {
         "status": True,
-        "pos": p,
-        "msg": "success",
+        "pos": p,  # 位置
+        "msg": "success",  # 成功
         "data": {
-            "residual": resd,
-            "azel": azel,
-            "exclude": ex,
-            "eph": rs,
-            "dts": dts,
-            "sats": sats,
+            "residual": resd,  # 残差
+            "azel": azel,  # 卫星天顶角和方位角
+            "exclude": ex,  # 排除的卫星
+            "eph": rs,  # 卫星位置
+            "dts": dts,  # 卫星时间差
+            "sats": sats,  # 卫星编号
             "prs": prs[list(inc)],
             "SNR": SNR[list(inc)],
         },
@@ -1231,6 +1234,7 @@ if torch_enable:
         return H, R, azel, ex, sysinfo, count, vels, vions, vtrps
 
     def get_ls_pnt_pos_torch(o, nav, w=None, b=None, p_init=None, exsatids=[]):
+        '''gogpsw torch version'''
         maxiter = 10
         if o.n < 4:
             return {

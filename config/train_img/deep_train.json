@@ -1,0 +1,15 @@
+{
+    "obs":["../dataset/deep/gnss/UrbanNav-HK-Deep-Urban-1.ublox.f9p.obs"],
+    "eph":"../dataset/deep/2025-Mar-27_211532/Output/hksc141g.21*",
+    "gt":"../dataset/deep/gt/UrbanNav_whampoa_raw.txt",
+    "img":"../dataset/deep/img",
+    "start_time":1621578524,
+    "end_time":1621580062,
+    "model":"model/image_urbandeep",
+    "mode":"train",
+    "lr":1e-2,
+    "weight_decay":1e-4,
+    "l_norm_std": [[0.3329756, 0.32812244, 0.33663929], [0.2761217, 0.3001835, 0.29802147]],
+    "r_norm_std": [[0.33197406, 0.3237899, 0.33343443], [0.27883857, 0.30134478, 0.30014893]]
+}
+

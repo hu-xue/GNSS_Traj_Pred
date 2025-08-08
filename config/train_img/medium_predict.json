@@ -1,0 +1,12 @@
+{
+    "obs":["../dataset/medium/gnss/UrbanNav-HK-Medium-Urban-1.ublox.f9p.obs"],
+    "eph":["../dataset/medium/2025-Apr-02_133620/Output/hksc137c.21*"],
+    "gt":"../dataset/medium/gt/UrbanNav_TST_GT_raw.txt",
+    "img":"../dataset/medium/img",
+    "start_time":1621218775,
+    "end_time":1621219561,
+    "model":"model/image_urbandeep",
+    "mode":"predict",
+    "l_norm_std": [[0.3329756, 0.32812244, 0.33663929], [0.2761217, 0.3001835, 0.29802147]],
+    "r_norm_std": [[0.33197406, 0.3237899, 0.33343443], [0.27883857, 0.30134478, 0.30014893]]
+}
