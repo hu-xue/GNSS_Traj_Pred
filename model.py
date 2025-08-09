@@ -55,7 +55,7 @@ class VGPNet(nn.Module):
             bidirectional=False
         )
 
-        feature_dim = 256
+        feature_dim = 128
         
         self.weights_bias_head = nn.Sequential(
             nn.Linear(feature_dim, 64),
@@ -75,7 +75,7 @@ class VGPNet(nn.Module):
             nn.Linear(32, self.prediction_length * 2),  # 预测长度的权重和偏置
         )
         
-        self.ccffm = CCFFM(channels=64, heads=4)
+        self.ccffm = CCFFM(channels=128, heads=4)
 
     def forward(self, x_sequence, img_sequence):
         """
@@ -125,12 +125,14 @@ class VGPNet(nn.Module):
         last_img_features = img_lstm_out[-1]
         last_img_features = last_img_features.repeat(max_sats_num, 1)  # [last_sats_num, 128]
         
-        # print(f"last_sat_features shape: {last_sat_features.shape}, last_img_features shape: {last_img_features.shape}")
-        
         # 卫星特征和图像特征拼接
-        combined_features = torch.cat([last_sat_features, last_img_features], dim=-1)
+        fused_features = self.ccffm(last_sat_features.unsqueeze(-1).unsqueeze(-1), last_img_features.unsqueeze(-1).unsqueeze(-1))  # [1, max_sats_num, 64]
+        fused_features = fused_features.view(-1, 128)  
+        fused_features = torch.tanh(fused_features)  
+        fused_features = nn.Parameter(torch.tensor(0.5)) * fused_features + (1 - nn.Parameter(torch.tensor(0.5))) * last_sat_features
+        
         # 计算index为4的权重和偏置
-        weights_bias = self.weights_bias_head(combined_features)
+        weights_bias = self.weights_bias_head(fused_features)
         
         weights = torch.sigmoid(weights_bias[:, 0])
         weights = torch.clamp(weights, min=0, max=1)
@@ -138,7 +140,7 @@ class VGPNet(nn.Module):
         
         
         # 计算未来8个时间步的权重和偏置
-        pred_weights_bias = self.pred_weight_bias_head(combined_features)
+        pred_weights_bias = self.pred_weight_bias_head(fused_features)
         
         pred_weights = torch.sigmoid(pred_weights_bias[:, :self.prediction_length])
         pred_weights = torch.clamp(pred_weights, min=0, max=1)
@@ -161,44 +163,34 @@ class CCFFM(nn.Module):
         self.qkv_proj = nn.ModuleList([nn.Linear(channels, channels) for _ in range(6)])  # 2x(q,k,v)
         self.out_proj = nn.Linear(2 * channels, channels)
 
-    def forward(self, x1, x2, mask=None):
-        # x1, x2: [batch_size, max_satellites, 64]
-        # mask: [batch_size, max_satellites]，True表示有效
-        B, S, C = x1.size()
-        device = x1.device
-        # mask处理：无效卫星特征置零
-        if mask is not None:
-            mask_expand = mask.unsqueeze(-1).expand(-1, -1, C)  # [B, S, C]
-            x1 = x1 * mask_expand.float()
-            x2 = x2 * mask_expand.float()
-        # 伪造空间维度以适配原有实现
-        x1_reshape = x1.unsqueeze(-1).unsqueeze(-1)  # [B, S, C, 1, 1]
-        x2_reshape = x2.unsqueeze(-1).unsqueeze(-1)
-        # 合并S维到batch
-        x1_flat = x1_reshape.view(B * S, C, 1, 1)
-        x2_flat = x2_reshape.view(B * S, C, 1, 1)
+    def forward(self, x1, x2):
         # flatten spatial: B,C,H,W -> B,H*W,C
+        B, C, H, W = x1.size()
+
         def flatten(x):
             return x.flatten(2).transpose(1, 2)
-        x1_flatten = flatten(x1_flat)  # [B*S, 1, C]
-        x2_flatten = flatten(x2_flat)
+
+        x1_flat, x2_flat = map(flatten, [x1, x2])
+
         # QKV projection
-        q1 = self.qkv_proj[0](x1_flatten)
-        k1 = self.qkv_proj[1](x1_flatten)
-        v1 = self.qkv_proj[2](x1_flatten)
-        q2 = self.qkv_proj[3](x2_flatten)
-        k2 = self.qkv_proj[4](x2_flatten)
-        v2 = self.qkv_proj[5](x2_flatten)
+        q1 = self.qkv_proj[0](x1_flat)
+        k1 = self.qkv_proj[1](x1_flat)
+        v1 = self.qkv_proj[2](x1_flat)
+
+        q2 = self.qkv_proj[3](x2_flat)
+        k2 = self.qkv_proj[4](x2_flat)
+        v2 = self.qkv_proj[5](x2_flat)
+
         def cross_attn(q, k, v):
             scores = torch.matmul(q, k.transpose(-2, -1)) / (self.channels**0.5)
             attn = F.softmax(scores, dim=-1)
             return torch.matmul(attn, v)
+
         out1 = (cross_attn(q1, k2, v2) + cross_attn(q1, k1, v1)) / 2
         out2 = (cross_attn(q2, k1, v1) + cross_attn(q2, k2, v2)) / 2
-        out_cat = torch.cat([out1, out2], dim=-1)  # [B*S, 1, 2C]
-        out = self.out_proj(out_cat)  # [B*S, 1, C]
-        out = out.transpose(1, 2).view(B, S, C)
-        # 输出也按mask置零
-        if mask is not None:
-            out = out * mask.unsqueeze(-1).float()
+
+        out_cat = torch.cat([out1, out2], dim=-1)  # [B, H*W, 2C]
+        out = self.out_proj(out_cat)  # [B, H*W, C]
+        out = out.transpose(1, 2).view(B, C, H, W)
+
         return out

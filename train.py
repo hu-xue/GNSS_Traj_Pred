@@ -362,12 +362,8 @@ for k in range(resume_ep, epoch):
     vis_loss.append(np.mean(epoch_loss))
     print(f"Epoch {k+1} loss: {vis_loss[-1]}")
     
-    
     if k % 10 == 0 and k > 0:
-        torch.save(
-            net.state_dict(),
-            os.path.join(model_dir, f"image_ep{k}.pth"),
-        )
+        torch.save(net.state_dict(), os.path.join(model_dir, f"image_ep{k}.pth"))
         plt.plot(vis_loss)
         plt.savefig(result_path + f"/loss_{k}.png")
         vis_loss_300 = np.array(vis_loss)

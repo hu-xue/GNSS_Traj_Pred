@@ -81,7 +81,7 @@ net = VGPNet(
     prediction_length=2,   # 预测序列长度
 )
 net.double()
-net.load_state_dict(torch.load(f"model/image_klt3_gf_ccffm_20250808_130052/image_ep70.pth"))
+net.load_state_dict(torch.load(f"model/image_klt3_gf_ccffm_20250809_033514/image_3d.pth"))
 net = net.to(DEVICE)
 
 
@@ -249,7 +249,7 @@ with tqdm(valid_indices,desc=f"Predicting...", ncols=80) as t:
         pred_errors = []
         pred_ecef_pos = []
         for i, idx in enumerate(target_indices):
-            o=obss[idx]
+            o=pred_obss
 
             ret = util.get_ls_pnt_pos(o, nav)
             SNR = np.array(ret["data"]["SNR"])
